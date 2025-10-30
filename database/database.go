@@ -103,6 +103,7 @@ func InitDB() error {
 		weight REAL NOT NULL,
 		points_earned INTEGER NOT NULL,
 		station_id INTEGER DEFAULT 1,
+		session_token TEXT,
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (user_id) REFERENCES users(id)
 	);`
@@ -180,6 +181,31 @@ func InitDB() error {
 	if err != nil {
 		return err
 	}
+
+	// Create station_sessions table for QR session management
+	createStationSessionsTable := `
+	CREATE TABLE IF NOT EXISTS station_sessions (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		session_token TEXT UNIQUE NOT NULL,
+		station_id TEXT DEFAULT 'default',
+		user_id INTEGER,
+		status TEXT DEFAULT 'pending',
+		auth_token TEXT,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		expires_at DATETIME NOT NULL,
+		ended_at DATETIME,
+		FOREIGN KEY (user_id) REFERENCES users(id)
+	);`
+
+	_, err = DB.Exec(createStationSessionsTable)
+	if err != nil {
+		return err
+	}
+
+	// Create index for better query performance
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_session_token ON station_sessions(session_token)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_session_status ON station_sessions(status)`)
+	DB.Exec(`CREATE INDEX IF NOT EXISTS idx_session_expires ON station_sessions(expires_at)`)
 
 	// Insert default station if not exists
 	DB.Exec(`INSERT OR IGNORE INTO stations (id, location, status, capacity) VALUES (1, 'Main Station', 'active', 100)`)

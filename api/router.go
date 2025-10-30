@@ -58,6 +58,14 @@ func SetupRouter() *chi.Mux {
 		r.Post("/register", register)
 	})
 
+	// Session management routes (public for station use)
+	r.Route("/api", func(r chi.Router) {
+		r.Post("/request-session", requestSession)
+		r.Post("/check-session", checkSession)
+		r.Post("/connect-session", connectSession)
+		r.Post("/end-session", endSession)
+	})
+
 	// Protected routes
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware)
@@ -81,6 +89,9 @@ func SetupRouter() *chi.Mux {
 		r.Get("/api/station/status", getStationStatus)
 		r.Post("/api/station/deposit", processDeposit)
 		r.Get("/api/station/config", getStationConfig)
+
+		// Session-based deposit (requires auth)
+		r.Post("/api/deposit", deposit)
 	})
 
 	// WebSocket
@@ -161,6 +172,28 @@ func generateJWT(userID int) (string, error) {
 		"exp":     time.Now().Add(24 * time.Hour).Unix(),
 	})
 	return token.SignedString(jwtSecret)
+}
+
+func verifyJWT(tokenString string) (int, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		return jwtSecret, nil
+	})
+
+	if err != nil || !token.Valid {
+		return 0, err
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, jwt.ErrInvalidKey
+	}
+
+	userIDStr, ok := claims["user_id"].(string)
+	if !ok {
+		return 0, jwt.ErrInvalidKey
+	}
+
+	return strconv.Atoi(userIDStr)
 }
 
 // Health check handler
