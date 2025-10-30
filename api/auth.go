@@ -17,7 +17,6 @@ type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	FullName string `json:"full_name"`
-	Phone    string `json:"phone"`
 }
 
 // Login request
@@ -148,8 +147,8 @@ func register(w http.ResponseWriter, r *http.Request) {
 
 	// Insert user
 	result, err := database.DB.Exec(
-		"INSERT INTO users (email, password, full_name, phone, total_points) VALUES (?, ?, ?, ?, ?)",
-		req.Email, hashedPassword, req.FullName, req.Phone, 0,
+		"INSERT INTO users (email, password, full_name, total_points) VALUES (?, ?, ?, ?)",
+		req.Email, hashedPassword, req.FullName, 0,
 	)
 	if err != nil {
 		respondJSON(w, http.StatusConflict, Response{
