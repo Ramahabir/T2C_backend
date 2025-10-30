@@ -17,7 +17,6 @@ type User struct {
 	Email       string    `json:"email"`
 	Password    string    `json:"-"`
 	FullName    string    `json:"full_name"`
-	Phone       string    `json:"phone"`
 	TotalPoints int       `json:"total_points"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
@@ -83,7 +82,6 @@ func InitDB() error {
 		email TEXT UNIQUE NOT NULL,
 		password TEXT NOT NULL,
 		full_name TEXT NOT NULL,
-		phone TEXT,
 		total_points INTEGER DEFAULT 0,
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -190,8 +188,8 @@ func InitDB() error {
 	// Hash the password "dummy123"
 	dummyPasswordHash, err := bcrypt.GenerateFromPassword([]byte("dummy123"), bcrypt.DefaultCost)
 	if err == nil {
-		DB.Exec(`INSERT OR IGNORE INTO users (id, email, password, full_name, phone, total_points) 
-			VALUES (1, 'dummy@trash2cash.com', ?, 'Dummy User', '1234567890', 1000)`, string(dummyPasswordHash))
+		DB.Exec(`INSERT OR IGNORE INTO users (id, email, password, full_name, total_points) 
+			VALUES (1, 'dummy@trash2cash.com', ?, 'Dummy User', 1000)`, string(dummyPasswordHash))
 		log.Println("Dummy user created: dummy@trash2cash.com / dummy123")
 	}
 
@@ -199,8 +197,8 @@ func InitDB() error {
 	// Hash the password "demo123"
 	demoPasswordHash, err := bcrypt.GenerateFromPassword([]byte("demo123"), bcrypt.DefaultCost)
 	if err == nil {
-		DB.Exec(`INSERT OR IGNORE INTO users (id, email, password, full_name, phone, total_points) 
-			VALUES (2, 'demo@trash2cash.com', ?, 'Demo User', '0987654321', 2500)`, string(demoPasswordHash))
+		DB.Exec(`INSERT OR IGNORE INTO users (id, email, password, full_name, total_points) 
+			VALUES (2, 'demo@trash2cash.com', ?, 'Demo User', 2500)`, string(demoPasswordHash))
 		log.Println("Demo user created: demo@trash2cash.com / demo123")
 	}
 

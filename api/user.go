@@ -20,9 +20,9 @@ func getUserProfile(w http.ResponseWriter, r *http.Request) {
 
 	var user database.User
 	err = database.DB.QueryRow(`
-		SELECT id, email, full_name, phone, total_points, created_at, updated_at
+		SELECT id, email, full_name, total_points, created_at, updated_at
 		FROM users WHERE id = ?
-	`, userID).Scan(&user.ID, &user.Email, &user.FullName, &user.Phone,
+	`, userID).Scan(&user.ID, &user.Email, &user.FullName,
 		&user.TotalPoints, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
@@ -108,7 +108,6 @@ func updateUserProfile(w http.ResponseWriter, r *http.Request) {
 
 	var req struct {
 		FullName string `json:"full_name"`
-		Phone    string `json:"phone"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -120,9 +119,9 @@ func updateUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = database.DB.Exec(`
-		UPDATE users SET full_name = ?, phone = ?, updated_at = ?
+		UPDATE users SET full_name = ?, updated_at = ?
 		WHERE id = ?
-	`, req.FullName, req.Phone, time.Now(), userID)
+	`, req.FullName, time.Now(), userID)
 
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, Response{

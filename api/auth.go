@@ -62,9 +62,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var hashedPassword string
 
 	err := database.DB.QueryRow(
-		"SELECT id, email, password, full_name, phone, total_points FROM users WHERE email = ?",
+		"SELECT id, email, password, full_name, total_points FROM users WHERE email = ?",
 		req.Email,
-	).Scan(&user.ID, &user.Email, &hashedPassword, &user.FullName, &user.Phone, &user.TotalPoints)
+	).Scan(&user.ID, &user.Email, &hashedPassword, &user.FullName, &user.TotalPoints)
 
 	if err != nil {
 		log.Printf("Login failed: user not found for email %s, error: %v", req.Email, err)
@@ -108,7 +108,6 @@ func login(w http.ResponseWriter, r *http.Request) {
 				"id":           user.ID,
 				"email":        user.Email,
 				"full_name":    user.FullName,
-				"phone":        user.Phone,
 				"total_points": user.TotalPoints,
 			},
 		},
@@ -270,9 +269,9 @@ func verifyToken(w http.ResponseWriter, r *http.Request) {
 	var hashedPassword string
 
 	err = database.DB.QueryRow(
-		"SELECT id, email, password, full_name, phone, total_points FROM users WHERE email = ?",
+		"SELECT id, email, password, full_name, total_points FROM users WHERE email = ?",
 		req.Email,
-	).Scan(&user.ID, &user.Email, &hashedPassword, &user.FullName, &user.Phone, &user.TotalPoints)
+	).Scan(&user.ID, &user.Email, &hashedPassword, &user.FullName, &user.TotalPoints)
 
 	if err != nil {
 		respondJSON(w, http.StatusUnauthorized, Response{
@@ -324,7 +323,6 @@ func verifyToken(w http.ResponseWriter, r *http.Request) {
 				"id":           user.ID,
 				"email":        user.Email,
 				"full_name":    user.FullName,
-				"phone":        user.Phone,
 				"total_points": user.TotalPoints,
 			},
 		},
