@@ -4,8 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"log"
-	"t2cbackend/database"
 	"net/http"
+	"t2cbackend/database"
 	"time"
 
 	"github.com/google/uuid"
@@ -159,13 +159,27 @@ func register(w http.ResponseWriter, r *http.Request) {
 
 	userID, _ := result.LastInsertId()
 
+	// Generate JWT token for immediate login after registration
+	jwtToken, err := generateJWT(int(userID))
+	if err != nil {
+		respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   "Registration successful but failed to generate token",
+		})
+		return
+	}
+
 	respondJSON(w, http.StatusCreated, Response{
 		Success: true,
 		Message: "Registration successful",
 		Data: map[string]interface{}{
-			"id":         userID,
-			"email":      req.Email,
-			"full_name":  req.FullName,
+			"token": jwtToken,
+			"user": map[string]interface{}{
+				"id":           userID,
+				"email":        req.Email,
+				"full_name":    req.FullName,
+				"total_points": 0,
+			},
 		},
 	})
 }
@@ -317,7 +331,7 @@ func verifyToken(w http.ResponseWriter, r *http.Request) {
 		Success: true,
 		Message: "Authentication successful",
 		Data: map[string]interface{}{
-			"token":        jwtToken,
+			"token":         jwtToken,
 			"session_token": token,
 			"user": map[string]interface{}{
 				"id":           user.ID,
