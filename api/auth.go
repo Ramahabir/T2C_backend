@@ -17,6 +17,7 @@ type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 	FullName string `json:"full_name"`
+	Name     string `json:"name"` // Alternative field name for compatibility
 }
 
 // Login request
@@ -126,10 +127,16 @@ func register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate input
-	if req.Email == "" || req.Password == "" || req.FullName == "" {
+	// Accept either 'name' or 'full_name' from client
+	fullName := req.FullName
+	if fullName == "" {
+		fullName = req.Name
+	}
+
+	if req.Email == "" || req.Password == "" || fullName == "" {
 		respondJSON(w, http.StatusBadRequest, Response{
 			Success: false,
-			Error:   "Email, password, and full name are required",
+			Error:   "Email, password, and name are required",
 		})
 		return
 	}
@@ -147,7 +154,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 	// Insert user
 	result, err := database.DB.Exec(
 		"INSERT INTO users (email, password, full_name, total_points) VALUES (?, ?, ?, ?)",
-		req.Email, hashedPassword, req.FullName, 0,
+		req.Email, hashedPassword, fullName, 0,
 	)
 	if err != nil {
 		respondJSON(w, http.StatusConflict, Response{
@@ -177,7 +184,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			"user": map[string]interface{}{
 				"id":           userID,
 				"email":        req.Email,
-				"full_name":    req.FullName,
+				"full_name":    fullName,
 				"total_points": 0,
 			},
 		},
