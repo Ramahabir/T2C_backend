@@ -16,7 +16,6 @@ import (
 type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
-	FullName string `json:"full_name"`
 	Name     string `json:"name"` // Alternative field name for compatibility
 }
 
@@ -63,9 +62,9 @@ func login(w http.ResponseWriter, r *http.Request) {
 	var hashedPassword string
 
 	err := database.DB.QueryRow(
-		"SELECT id, email, password, full_name, total_points FROM users WHERE email = ?",
+		"SELECT id, email, password, name, total_points FROM users WHERE email = ?",
 		req.Email,
-	).Scan(&user.ID, &user.Email, &hashedPassword, &user.FullName, &user.TotalPoints)
+	).Scan(&user.ID, &user.Email, &hashedPassword, &user.Name, &user.TotalPoints)
 
 	if err != nil {
 		log.Printf("Login failed: user not found for email %s, error: %v", req.Email, err)
@@ -108,7 +107,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 			"user": map[string]interface{}{
 				"id":           user.ID,
 				"email":        user.Email,
-				"full_name":    user.FullName,
+				"name":         user.Name,
 				"total_points": user.TotalPoints,
 			},
 		},
@@ -127,13 +126,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate input
-	// Accept either 'name' or 'full_name' from client
-	fullName := req.FullName
-	if fullName == "" {
-		fullName = req.Name
-	}
-
-	if req.Email == "" || req.Password == "" || fullName == "" {
+	if req.Email == "" || req.Password == "" || req.Name == "" {
 		respondJSON(w, http.StatusBadRequest, Response{
 			Success: false,
 			Error:   "Email, password, and name are required",
@@ -153,8 +146,8 @@ func register(w http.ResponseWriter, r *http.Request) {
 
 	// Insert user
 	result, err := database.DB.Exec(
-		"INSERT INTO users (email, password, full_name, total_points) VALUES (?, ?, ?, ?)",
-		req.Email, hashedPassword, fullName, 0,
+		"INSERT INTO users (email, password, name, total_points) VALUES (?, ?, ?, ?)",
+		req.Email, hashedPassword, req.Name, 0,
 	)
 	if err != nil {
 		respondJSON(w, http.StatusConflict, Response{
@@ -184,7 +177,7 @@ func register(w http.ResponseWriter, r *http.Request) {
 			"user": map[string]interface{}{
 				"id":           userID,
 				"email":        req.Email,
-				"full_name":    fullName,
+				"name":         req.Name,
 				"total_points": 0,
 			},
 		},
@@ -290,9 +283,9 @@ func verifyToken(w http.ResponseWriter, r *http.Request) {
 	var hashedPassword string
 
 	err = database.DB.QueryRow(
-		"SELECT id, email, password, full_name, total_points FROM users WHERE email = ?",
+		"SELECT id, email, password, name, total_points FROM users WHERE email = ?",
 		req.Email,
-	).Scan(&user.ID, &user.Email, &hashedPassword, &user.FullName, &user.TotalPoints)
+	).Scan(&user.ID, &user.Email, &hashedPassword, &user.Name, &user.TotalPoints)
 
 	if err != nil {
 		respondJSON(w, http.StatusUnauthorized, Response{
@@ -343,7 +336,7 @@ func verifyToken(w http.ResponseWriter, r *http.Request) {
 			"user": map[string]interface{}{
 				"id":           user.ID,
 				"email":        user.Email,
-				"full_name":    user.FullName,
+				"name":         user.Name,
 				"total_points": user.TotalPoints,
 			},
 		},

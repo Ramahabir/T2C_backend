@@ -165,9 +165,9 @@ func checkSession(w http.ResponseWriter, r *http.Request) {
 	// Session is connected - get user details
 	var user database.User
 	err = database.DB.QueryRow(
-		"SELECT id, email, full_name, total_points FROM users WHERE id = ?",
+		"SELECT id, email, name, total_points FROM users WHERE id = ?",
 		*userID,
-	).Scan(&user.ID, &user.Email, &user.FullName, &user.TotalPoints)
+	).Scan(&user.ID, &user.Email, &user.Name, &user.TotalPoints)
 
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, Response{
@@ -183,7 +183,7 @@ func checkSession(w http.ResponseWriter, r *http.Request) {
 			"status":      status,
 			"authToken":   authToken,
 			"userId":      user.ID,
-			"userName":    user.FullName,
+			"userName":    user.Name,
 			"userBalance": user.TotalPoints,
 		},
 	})

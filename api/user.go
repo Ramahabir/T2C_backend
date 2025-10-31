@@ -2,8 +2,8 @@ package api
 
 import (
 	"encoding/json"
-	"t2cbackend/database"
 	"net/http"
+	"t2cbackend/database"
 	"time"
 )
 
@@ -20,9 +20,9 @@ func getUserProfile(w http.ResponseWriter, r *http.Request) {
 
 	var user database.User
 	err = database.DB.QueryRow(`
-		SELECT id, email, full_name, total_points, created_at, updated_at
+		SELECT id, email, name, total_points, created_at, updated_at
 		FROM users WHERE id = ?
-	`, userID).Scan(&user.ID, &user.Email, &user.FullName,
+	`, userID).Scan(&user.ID, &user.Email, &user.Name,
 		&user.TotalPoints, &user.CreatedAt, &user.UpdatedAt)
 
 	if err != nil {
@@ -107,7 +107,7 @@ func updateUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		FullName string `json:"full_name"`
+		Name string `json:"name"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -119,9 +119,9 @@ func updateUserProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, err = database.DB.Exec(`
-		UPDATE users SET full_name = ?, updated_at = ?
+		UPDATE users SET name = ?, updated_at = ?
 		WHERE id = ?
-	`, req.FullName, time.Now(), userID)
+	`, req.Name, time.Now(), userID)
 
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, Response{
