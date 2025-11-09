@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/base64"
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 	"t2cbackend/database"
@@ -43,8 +44,17 @@ type SessionDepositRequest struct {
 // requestSession creates a new station session and generates QR code
 func requestSession(w http.ResponseWriter, r *http.Request) {
 	var req RequestSessionRequest
+	// Ensure request body is closed
 	if r.Body != nil {
-		json.NewDecoder(r.Body).Decode(&req)
+		defer r.Body.Close()
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && err != io.EOF {
+			log.Printf("requestSession: failed to decode request body: %v", err)
+			respondJSON(w, http.StatusBadRequest, Response{
+				Success: false,
+				Error:   "Invalid request body",
+			})
+			return
+		}
 	}
 
 	// Generate unique session token
@@ -61,17 +71,20 @@ func requestSession(w http.ResponseWriter, r *http.Request) {
 		stationID = "default"
 	}
 
-	_, err := database.DB.Exec(
+	res, err := database.DB.Exec(
 		"INSERT INTO station_sessions (session_token, station_id, status, expires_at) VALUES (?, ?, ?, ?)",
 		sessionToken, stationID, "pending", expiresAt,
 	)
 	if err != nil {
-		log.Printf("Failed to insert session into database: %v", err)
+		log.Printf("requestSession: failed to insert session into database: %v", err)
 		respondJSON(w, http.StatusInternalServerError, Response{
 			Success: false,
 			Error:   "Failed to create session",
 		})
 		return
+	}
+	if id, err := res.LastInsertId(); err == nil {
+		log.Printf("requestSession: session inserted id=%d token=%s", id, sessionToken)
 	}
 
 	// Generate QR code containing session token
@@ -86,6 +99,8 @@ func requestSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to base64
+	// Log QR payload size to help debug reverse-proxy/response issues
+	log.Printf("requestSession: generated qr bytes size=%d for token=%s", len(qrBytes), sessionToken)
 	qrBase64 := base64.StdEncoding.EncodeToString(qrBytes)
 
 	respondJSON(w, http.StatusOK, Response{
