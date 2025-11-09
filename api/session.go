@@ -6,8 +6,12 @@ import (
 	"io"
 	"log"
 	"net/http"
-	"t2cbackend/database"
+	"strconv"
 	"time"
+
+	sql "database/sql"
+
+	"t2cbackend/database"
 
 	"github.com/google/uuid"
 	qrcode "github.com/skip2/go-qrcode"
@@ -73,7 +77,7 @@ func requestSession(w http.ResponseWriter, r *http.Request) {
 
 	res, err := database.DB.Exec(
 		"INSERT INTO station_sessions (session_token, station_id, status, expires_at) VALUES (?, ?, ?, ?)",
-		sessionToken, stationID, "pending", expiresAt,
+		sessionToken, stationID, "pending", expiresAt.Format(time.RFC3339),
 	)
 	if err != nil {
 		log.Printf("requestSession: failed to insert session into database: %v", err)
@@ -134,17 +138,17 @@ func checkSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Query session from database
+	// Query session from database using sql.Null types to avoid driver-specific time scanning issues
 	var sessionID int
-	var userID *int
+	var userID sql.NullInt64
 	var status string
-	var authToken *string
-	var expiresAt time.Time
+	var authToken sql.NullString
+	var expiresAtRaw string
 
 	err := database.DB.QueryRow(
 		"SELECT id, user_id, status, auth_token, expires_at FROM station_sessions WHERE session_token = ?",
 		req.SessionToken,
-	).Scan(&sessionID, &userID, &status, &authToken, &expiresAt)
+	).Scan(&sessionID, &userID, &status, &authToken, &expiresAtRaw)
 
 	if err != nil {
 		respondJSON(w, http.StatusNotFound, Response{
@@ -154,8 +158,37 @@ func checkSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse expires_at robustly (try multiple common layouts)
+	var expiresAt time.Time
+	var parseErr error
+	if expiresAtRaw != "" {
+		layouts := []string{time.RFC3339, time.RFC3339Nano, "2006-01-02 15:04:05", time.RFC1123}
+		for _, l := range layouts {
+			expiresAt, parseErr = time.Parse(l, expiresAtRaw)
+			if parseErr == nil {
+				break
+			}
+		}
+		if parseErr != nil {
+			// last-resort: try parsing as unix timestamp
+			if ts, err2 := strconv.ParseInt(expiresAtRaw, 10, 64); err2 == nil {
+				expiresAt = time.Unix(ts, 0)
+				parseErr = nil
+			}
+		}
+	}
+
+	if parseErr != nil {
+		log.Printf("checkSession: failed to parse expires_at: %v (raw=%s)", parseErr, expiresAtRaw)
+		respondJSON(w, http.StatusInternalServerError, Response{
+			Success: false,
+			Error:   "Failed to parse session expiry",
+		})
+		return
+	}
+
 	// Check if session has expired
-	if time.Now().After(expiresAt) {
+	if !expiresAt.IsZero() && time.Now().After(expiresAt) {
 		// Update session status to expired
 		database.DB.Exec("UPDATE station_sessions SET status = ? WHERE id = ?", "expired", sessionID)
 
@@ -166,8 +199,8 @@ func checkSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If session is still pending
-	if status == "pending" || userID == nil {
+	// If session is still pending or no user linked yet
+	if status == "pending" || !userID.Valid {
 		respondJSON(w, http.StatusOK, Response{
 			Success: true,
 			Data: map[string]interface{}{
@@ -179,9 +212,10 @@ func checkSession(w http.ResponseWriter, r *http.Request) {
 
 	// Session is connected - get user details
 	var user database.User
+	uid := int(userID.Int64)
 	err = database.DB.QueryRow(
 		"SELECT id, email, name, total_points FROM users WHERE id = ?",
-		*userID,
+		uid,
 	).Scan(&user.ID, &user.Email, &user.Name, &user.TotalPoints)
 
 	if err != nil {
@@ -192,11 +226,17 @@ func checkSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prepare auth token value if present
+	var authTokenVal interface{}
+	if authToken.Valid {
+		authTokenVal = authToken.String
+	}
+
 	respondJSON(w, http.StatusOK, Response{
 		Success: true,
 		Data: map[string]interface{}{
 			"status":      status,
-			"authToken":   authToken,
+			"authToken":   authTokenVal,
 			"userId":      user.ID,
 			"userName":    user.Name,
 			"userBalance": user.TotalPoints,
@@ -233,16 +273,16 @@ func connectSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if session exists and is pending
+	// Check if session exists and is pending. Use sql.Null types and parse expiry string.
 	var sessionID int
 	var status string
-	var expiresAt time.Time
-	var existingUserID *int
+	var existingUserID sql.NullInt64
+	var expiresAtRaw string
 
 	err = database.DB.QueryRow(
 		"SELECT id, user_id, status, expires_at FROM station_sessions WHERE session_token = ?",
 		req.SessionToken,
-	).Scan(&sessionID, &existingUserID, &status, &expiresAt)
+	).Scan(&sessionID, &existingUserID, &status, &expiresAtRaw)
 
 	if err != nil {
 		respondJSON(w, http.StatusNotFound, Response{
@@ -252,8 +292,35 @@ func connectSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if session has expired
-	if time.Now().After(expiresAt) {
+	// Parse and check if session has expired
+	var expiresAt time.Time
+	if expiresAtRaw != "" {
+		// try common layouts then unix timestamp
+		var perr error
+		layouts := []string{time.RFC3339, time.RFC3339Nano, "2006-01-02 15:04:05", time.RFC1123}
+		for _, l := range layouts {
+			expiresAt, perr = time.Parse(l, expiresAtRaw)
+			if perr == nil {
+				break
+			}
+		}
+		if perr != nil {
+			if ts, err2 := strconv.ParseInt(expiresAtRaw, 10, 64); err2 == nil {
+				expiresAt = time.Unix(ts, 0)
+				perr = nil
+			}
+		}
+		if perr != nil {
+			log.Printf("connectSession: failed to parse expires_at: %v (raw=%s)", perr, expiresAtRaw)
+			respondJSON(w, http.StatusInternalServerError, Response{
+				Success: false,
+				Error:   "Failed to parse session expiry",
+			})
+			return
+		}
+	}
+
+	if !expiresAt.IsZero() && time.Now().After(expiresAt) {
 		respondJSON(w, http.StatusUnauthorized, Response{
 			Success: false,
 			Error:   "Session has expired",
@@ -262,7 +329,7 @@ func connectSession(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if session is already connected
-	if existingUserID != nil {
+	if existingUserID.Valid {
 		respondJSON(w, http.StatusConflict, Response{
 			Success: false,
 			Error:   "Session is already connected to a user",
@@ -314,7 +381,7 @@ func endSession(w http.ResponseWriter, r *http.Request) {
 	// Update session status to expired and set ended_at
 	result, err := database.DB.Exec(
 		"UPDATE station_sessions SET status = ?, ended_at = ? WHERE session_token = ?",
-		"expired", time.Now(), req.SessionToken,
+		"expired", time.Now().Format(time.RFC3339), req.SessionToken,
 	)
 	if err != nil {
 		respondJSON(w, http.StatusInternalServerError, Response{
@@ -373,7 +440,7 @@ func deposit(w http.ResponseWriter, r *http.Request) {
 
 	// Verify session is active and linked to the user
 	var sessionID int
-	var sessionUserID *int
+	var sessionUserID sql.NullInt64
 	var status string
 
 	err = database.DB.QueryRow(
@@ -390,7 +457,7 @@ func deposit(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Verify session belongs to the authenticated user
-	if sessionUserID == nil || *sessionUserID != userID {
+	if !sessionUserID.Valid || int(sessionUserID.Int64) != userID {
 		respondJSON(w, http.StatusForbidden, Response{
 			Success: false,
 			Error:   "Session not linked to this user",
