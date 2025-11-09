@@ -60,10 +60,10 @@ func SetupRouter() *chi.Mux {
 
 	// Session management routes (public for station use)
 	r.Route("/api", func(r chi.Router) {
-		r.Post("/request-session", requestSession)
-		r.Post("/check-session", checkSession)
-		r.Post("/connect-session", connectSession)
-		r.Post("/end-session", endSession)
+		r.Post("/requestss", requestSession)
+		r.Post("/checkss", checkSession)
+		r.Post("/connectss", connectSession)
+		r.Post("/endss", endSession)
 	})
 
 	// Protected routes
